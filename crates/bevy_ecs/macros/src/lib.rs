@@ -457,7 +457,7 @@ pub fn derive_system_label(input: TokenStream) -> TokenStream {
     trait_path
         .segments
         .push(format_ident!("SystemLabel").into());
-    derive_label(input, trait_path)
+    derive_label(input, &trait_path)
 }
 
 #[proc_macro_derive(StageLabel)]
@@ -466,7 +466,7 @@ pub fn derive_stage_label(input: TokenStream) -> TokenStream {
     let mut trait_path = bevy_ecs_path();
     trait_path.segments.push(format_ident!("schedule").into());
     trait_path.segments.push(format_ident!("StageLabel").into());
-    derive_label(input, trait_path)
+    derive_label(input, &trait_path)
 }
 
 #[proc_macro_derive(AmbiguitySetLabel)]
@@ -477,7 +477,7 @@ pub fn derive_ambiguity_set_label(input: TokenStream) -> TokenStream {
     trait_path
         .segments
         .push(format_ident!("AmbiguitySetLabel").into());
-    derive_label(input, trait_path)
+    derive_label(input, &trait_path)
 }
 
 #[proc_macro_derive(RunCriteriaLabel)]
@@ -488,7 +488,7 @@ pub fn derive_run_criteria_label(input: TokenStream) -> TokenStream {
     trait_path
         .segments
         .push(format_ident!("RunCriteriaLabel").into());
-    derive_label(input, trait_path)
+    derive_label(input, &trait_path)
 }
 
 pub(crate) fn bevy_ecs_path() -> syn::Path {

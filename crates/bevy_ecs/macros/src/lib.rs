@@ -46,23 +46,27 @@ impl Parse for AllTuples {
 #[proc_macro]
 pub fn all_tuples(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as AllTuples);
-    let ident_tuples: Vec<_> = (input.start..=input.end)
-        .map(|i| {
-            let idents = input
-                .idents
-                .iter()
-                .map(|ident| format_ident!("{}{}", ident, i));
-            if input.idents.len() < 2 {
-                quote! { #(#idents)* }
-            } else {
-                quote! { (#(#idents),*) }
-            }
-        })
-        .collect();
+    let len = input.end - input.start;
+    let mut ident_tuples = Vec::with_capacity(len);
+    for i in input.start..=input.end {
+        let idents = input
+            .idents
+            .iter()
+            .map(|ident| format_ident!("{}{}", ident, i));
+        if input.idents.len() < 2 {
+            ident_tuples.push(quote! {
+                #(#idents)*
+            });
+        } else {
+            ident_tuples.push(quote! {
+                (#(#idents),*)
+            });
+        }
+    }
 
     let macro_ident = &input.macro_ident;
     let invocations = (input.start..=input.end).map(|i| {
-        let ident_tuples = &ident_tuples[0..i];
+        let ident_tuples = &ident_tuples[0..i - input.start];
         quote! {
             #macro_ident!(#(#ident_tuples),*);
         }

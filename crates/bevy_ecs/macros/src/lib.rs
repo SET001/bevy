@@ -249,8 +249,7 @@ pub fn impl_query_set(_input: TokenStream) -> TokenStream {
             unsafe impl<#(#query: WorldQuery + 'static,)* #(#filter: WorldQuery + 'static,)*> SystemParamState for QuerySetState<(#(QueryState<#query, #filter>,)*)>
                 where #(#filter::Fetch: FilterFetch,)*
             {
-                type Config = ();
-                fn init(world: &mut World, system_meta: &mut SystemMeta, config: Self::Config) -> Self {
+                fn init(world: &mut World, system_meta: &mut SystemMeta) -> Self {
                     #(
                         let mut #query = QueryState::<#query, #filter>::new(world);
                         assert_component_access_compatibility(
@@ -282,8 +281,6 @@ pub fn impl_query_set(_input: TokenStream) -> TokenStream {
                             .extend(&#query.archetype_component_access);
                     )*
                 }
-
-                fn default_config() {}
             }
 
             impl<'w, 's, #(#query: WorldQuery + 'static,)* #(#filter: WorldQuery + 'static,)*> SystemParamFetch<'w, 's> for QuerySetState<(#(QueryState<#query, #filter>,)*)>
@@ -417,20 +414,20 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
         }
 
         unsafe impl<TSystemParamState: #path::system::SystemParamState, #punctuated_generics> #path::system::SystemParamState for #fetch_struct_name<TSystemParamState, #punctuated_generic_idents> {
-            type Config = TSystemParamState::Config;
-            fn init(world: &mut #path::world::World, system_meta: &mut #path::system::SystemMeta, config: Self::Config) -> Self {
+            fn init(world: &mut #path::world::World, system_meta: &mut #path::system::SystemMeta) -> Self {
                 Self {
+<<<<<<< HEAD
                     state: TSystemParamState::init(world, system_meta, config),
                     marker: ::std::marker::PhantomData,
+=======
+                    state: TSystemParamState::init(world, system_meta),
+                    marker: std::marker::PhantomData,
+>>>>>>> c1a4a2f6c (Remove the config api (#3633))
                 }
             }
 
             fn new_archetype(&mut self, archetype: &#path::archetype::Archetype, system_meta: &mut #path::system::SystemMeta) {
                 self.state.new_archetype(archetype, system_meta)
-            }
-
-            fn default_config() -> TSystemParamState::Config {
-                TSystemParamState::default_config()
             }
 
             fn apply(&mut self, world: &mut #path::world::World) {

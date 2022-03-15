@@ -410,7 +410,11 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
         #[doc(hidden)]
         #fetch_struct_visibility struct #fetch_struct_name<TSystemParamState, #punctuated_generic_idents> {
             state: TSystemParamState,
+<<<<<<< HEAD
             marker: ::std::marker::PhantomData<(#punctuated_generic_idents)>
+=======
+            marker: std::marker::PhantomData<fn()->(#punctuated_generic_idents)>
+>>>>>>> 6e61fef67 (Obviate the need for `RunSystem`, and remove it (#3817))
         }
 
         unsafe impl<TSystemParamState: #path::system::SystemParamState, #punctuated_generics> #path::system::SystemParamState for #fetch_struct_name<TSystemParamState, #punctuated_generic_idents> {

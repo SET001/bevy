@@ -412,7 +412,7 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
 >>>>>>> 6e61fef67 (Obviate the need for `RunSystem`, and remove it (#3817))
         }
 
-        unsafe impl<TSystemParamState: #path::system::SystemParamState, #punctuated_generics> #path::system::SystemParamState for #fetch_struct_name<TSystemParamState, #punctuated_generic_idents> {
+        unsafe impl<TSystemParamState: #path::system::SystemParamState, #punctuated_generics> #path::system::SystemParamState for #fetch_struct_name<TSystemParamState, #punctuated_generic_idents> #where_clause {
             fn init(world: &mut #path::world::World, system_meta: &mut #path::system::SystemMeta) -> Self {
                 Self {
 <<<<<<< HEAD

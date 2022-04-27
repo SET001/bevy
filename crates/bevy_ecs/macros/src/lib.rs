@@ -151,18 +151,17 @@ fn derive_bundle_impl(input: DeriveInput) -> Result<TokenStream> {
                 self.#field.get_components(&mut func);
             });
             field_from_components.push(quote! {
-                #field: <#field_type as #ecs_path::bundle::Bundle>::from_components(&mut func),
+                #field: <#field_type as #ecs_path::bundle::Bundle>::from_components(ctx, &mut func),
             });
         } else {
             field_component_ids.push(quote! {
                 component_ids.push(components.init_component::<#field_type>(storages));
             });
             field_get_components.push(quote! {
-                func((&mut self.#field as *mut #field_type).cast::<u8>());
-                ::std::mem::forget(self.#field);
+                #ecs_path::ptr::OwningPtr::make(self.#field, &mut func);
             });
             field_from_components.push(quote! {
-                #field: func().cast::<#field_type>().read(),
+                #field: func(ctx).inner().as_ptr().cast::<#field_type>().read(),
             });
         }
     }
@@ -183,14 +182,17 @@ fn derive_bundle_impl(input: DeriveInput) -> Result<TokenStream> {
             }
 
             #[allow(unused_variables, unused_mut, non_snake_case)]
-            unsafe fn from_components(mut func: impl FnMut() -> *mut u8) -> Self {
+            unsafe fn from_components<T, F>(ctx: &mut T, mut func: F) -> Self
+            where
+                F: FnMut(&mut T) -> #ecs_path::ptr::OwningPtr<'_>
+            {
                 Self {
                     #(#field_from_components)*
                 }
             }
 
             #[allow(unused_variables, unused_mut, forget_copy, forget_ref)]
-            fn get_components(mut self, mut func: impl FnMut(*mut u8)) {
+            fn get_components(self, mut func: impl FnMut(#ecs_path::ptr::OwningPtr<'_>)) {
                 #(#field_get_components)*
             }
         }
@@ -405,23 +407,14 @@ pub fn derive_system_param(input: TokenStream) -> TokenStream {
         #[doc(hidden)]
         #fetch_struct_visibility struct #fetch_struct_name<TSystemParamState, #punctuated_generic_idents> {
             state: TSystemParamState,
-<<<<<<< HEAD
-            marker: ::std::marker::PhantomData<(#punctuated_generic_idents)>
-=======
             marker: std::marker::PhantomData<fn()->(#punctuated_generic_idents)>
->>>>>>> 6e61fef67 (Obviate the need for `RunSystem`, and remove it (#3817))
         }
 
         unsafe impl<TSystemParamState: #path::system::SystemParamState, #punctuated_generics> #path::system::SystemParamState for #fetch_struct_name<TSystemParamState, #punctuated_generic_idents> #where_clause {
             fn init(world: &mut #path::world::World, system_meta: &mut #path::system::SystemMeta) -> Self {
                 Self {
-<<<<<<< HEAD
-                    state: TSystemParamState::init(world, system_meta, config),
-                    marker: ::std::marker::PhantomData,
-=======
                     state: TSystemParamState::init(world, system_meta),
                     marker: std::marker::PhantomData,
->>>>>>> c1a4a2f6c (Remove the config api (#3633))
                 }
             }
 

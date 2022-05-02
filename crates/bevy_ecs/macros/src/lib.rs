@@ -182,9 +182,9 @@ fn derive_bundle_impl(input: DeriveInput) -> Result<TokenStream> {
             }
 
             #[allow(unused_variables, unused_mut, non_snake_case)]
-            unsafe fn from_components<T, F>(ctx: &mut T, mut func: F) -> Self
+            unsafe fn from_components<__T, __F>(ctx: &mut __T, mut func: __F) -> Self
             where
-                F: FnMut(&mut T) -> #ecs_path::ptr::OwningPtr<'_>
+                __F: FnMut(&mut __T) -> #ecs_path::ptr::OwningPtr<'_>
             {
                 Self {
                     #(#field_from_components)*

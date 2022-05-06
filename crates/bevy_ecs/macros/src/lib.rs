@@ -277,6 +277,10 @@ pub fn impl_param_set(_input: TokenStream) -> TokenStream {
                         #param.new_archetype(archetype, system_meta);
                     )*
                 }
+
+                fn apply(&mut self, world: &mut World) {
+                    self.0.apply(world)
+                }
             }
 
 

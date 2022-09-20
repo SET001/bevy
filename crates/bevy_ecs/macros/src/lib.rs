@@ -68,7 +68,7 @@ pub fn all_tuples(input: TokenStream) -> TokenStream {
 
     let macro_ident = &input.macro_ident;
     let invocations = (input.start..=input.end).map(|i| {
-        let ident_tuples = &ident_tuples[0..i - input.start];
+        let ident_tuples = &ident_tuples[..i];
         quote! {
             #macro_ident!(#(#ident_tuples),*);
         }
@@ -79,8 +79,6 @@ pub fn all_tuples(input: TokenStream) -> TokenStream {
         )*
     })
 }
-
-static BUNDLE_ATTRIBUTE_NAME: &str = "bundle";
 
 /// Derives the Bundle trait for a struct.
 ///
@@ -101,7 +99,7 @@ static BUNDLE_ATTRIBUTE_NAME: &str = "bundle";
 ///     z: String,
 /// }
 /// ```
-#[proc_macro_derive(Bundle, attributes(bundle))]
+#[proc_macro_derive(Bundle)]
 pub fn derive_bundle(input: TokenStream) -> TokenStream {
     derive_bundle_impl(parse_macro_input!(input as DeriveInput))
         .unwrap_or_else(|e| e.into_compile_error().into())
@@ -142,32 +140,20 @@ fn derive_bundle_impl(input: DeriveInput) -> Result<TokenStream> {
     let mut field_component_ids = Vec::new();
     let mut field_get_components = Vec::new();
     let mut field_from_components = Vec::new();
-    for (is_bundle, field, field_type) in fields {
-        if is_bundle {
-            field_component_ids.push(quote! {
-                component_ids.extend(<#field_type as #ecs_path::bundle::Bundle>::component_ids(components, storages));
-            });
-            field_get_components.push(quote! {
-                self.#field.get_components(&mut func);
-            });
-            field_from_components.push(quote! {
-                #field: <#field_type as #ecs_path::bundle::Bundle>::from_components(ctx, &mut func),
-            });
-        } else {
-            field_component_ids.push(quote! {
-                component_ids.push(components.init_component::<#field_type>(storages));
-            });
-            field_get_components.push(quote! {
-                #ecs_path::ptr::OwningPtr::make(self.#field, &mut func);
-            });
-            field_from_components.push(quote! {
-                #field: func(ctx).read::<#field_type>(),
-            });
-        }
+    for (field_type, field) in field_type.iter().zip(field.iter()) {
+        field_component_ids.push(quote! {
+        <#field_type as #ecs_path::bundle::Bundle>::component_ids(components, storages, &mut *ids);
+        });
+        field_get_components.push(quote! {
+            self.#field.get_components(&mut *func);
+        });
+        field_from_components.push(quote! {
+            #field: <#field_type as #ecs_path::bundle::Bundle>::from_components(ctx, &mut *func),
+        });
     }
-
-    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let ident = input.ident;
+    let generics = ast.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let struct_name = &ast.ident;
 
     TokenStream::from(quote! {
         /// SAFETY: ComponentId is returned in field-definition-order. [from_components] and [get_components] use field-definition-order
@@ -175,14 +161,13 @@ fn derive_bundle_impl(input: DeriveInput) -> Result<TokenStream> {
             fn component_ids(
                 components: &mut #ecs_path::component::Components,
                 storages: &mut #ecs_path::storage::Storages,
-            ) -> ::std::vec::Vec<#ecs_path::component::ComponentId> {
-                let mut component_ids = ::std::vec::Vec::with_capacity(#num_fields);
+                ids: &mut impl FnMut(#ecs_path::component::ComponentId)
+            ){
                 #(#field_component_ids)*
-                component_ids
             }
 
-            #[allow(unused_variables, unused_mut, non_snake_case)]
-            unsafe fn from_components<__T, __F>(ctx: &mut __T, mut func: __F) -> Self
+            #[allow(unused_variables, non_snake_case)]
+            unsafe fn from_components<__T, __F>(ctx: &mut __T, func: &mut __F) -> Self
             where
                 __F: FnMut(&mut __T) -> #ecs_path::ptr::OwningPtr<'_>
             {
@@ -191,8 +176,8 @@ fn derive_bundle_impl(input: DeriveInput) -> Result<TokenStream> {
                 }
             }
 
-            #[allow(unused_variables, unused_mut, forget_copy, forget_ref)]
-            fn get_components(self, mut func: impl FnMut(#ecs_path::ptr::OwningPtr<'_>)) {
+            #[allow(unused_variables)]
+            fn get_components(self, func: &mut impl FnMut(#ecs_path::ptr::OwningPtr<'_>)) {
                 #(#field_get_components)*
             }
         }

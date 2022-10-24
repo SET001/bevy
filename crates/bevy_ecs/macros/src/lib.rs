@@ -12,8 +12,10 @@ use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
+    spanned::Spanned,
     token::Comma,
-    Data, DataStruct, DeriveInput, Field, Ident, Index, LitInt, Result, Token,
+    Data, DataStruct, DeriveInput, Field, Fields, GenericParam, Ident, Index, Lifetime, LitInt,
+    Member, Meta, MetaList, NestedMeta, Result, Token,
 };
 
 struct AllTuples {
@@ -99,23 +101,28 @@ pub fn all_tuples(input: TokenStream) -> TokenStream {
 ///     z: String,
 /// }
 /// ```
-#[proc_macro_derive(Bundle)]
-pub fn derive_bundle(input: TokenStream) -> TokenStream {
-    derive_bundle_impl(parse_macro_input!(input as DeriveInput))
-        .unwrap_or_else(|e| e.into_compile_error().into())
+
+enum BundleFieldKind {
+    Component,
+    Ignore,
 }
 
-fn derive_bundle_impl(input: DeriveInput) -> Result<TokenStream> {
-    let ecs_path = bevy_ecs_path();
+const BUNDLE_ATTRIBUTE_NAME: &str = "bundle";
+const BUNDLE_ATTRIBUTE_IGNORE_NAME: &str = "ignore";
 
-    let (num_fields, fields) = match input.data {
-        Data::Struct(DataStruct { fields, .. }) if !fields.is_empty() => (fields.len(), fields),
-        _ => {
-            return Err(syn::Error::new_spanned(
-                input,
-                "`Bundle` can only be derived on structs with at least one field",
-            ))
-        }
+#[proc_macro_derive(Bundle, attributes(bundle))]
+pub fn derive_bundle(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+    let ident = ast.ident;
+    let ecs_path = bevy_ecs_path();
+    let named_fields = match get_named_struct_fields(&ast.data) {
+        Ok(fields) => &fields.named,
+        Err(e) => return e.into_compile_error().into(),
+    };
+
+    let (num_fields, fields) = match ast.data {
+        Data::Struct(DataStruct { fields, .. }) => (fields.len(), fields),
+        _ => panic!("Expected a struct."),
     };
 
     let fields = fields.into_iter().enumerate().map(|(idx, field)| {
@@ -136,20 +143,70 @@ fn derive_bundle_impl(input: DeriveInput) -> Result<TokenStream> {
 
         (is_bundle, ident, field.ty)
     });
+    let mut field_kind = Vec::with_capacity(named_fields.len());
+
+    'field_loop: for field in named_fields.iter() {
+        for attr in &field.attrs {
+            if attr.path.is_ident(BUNDLE_ATTRIBUTE_NAME) {
+                if let Ok(Meta::List(MetaList { nested, .. })) = attr.parse_meta() {
+                    if let Some(&NestedMeta::Meta(Meta::Path(ref path))) = nested.first() {
+                        if path.is_ident(BUNDLE_ATTRIBUTE_IGNORE_NAME) {
+                            field_kind.push(BundleFieldKind::Ignore);
+                            continue 'field_loop;
+                        }
+
+                        return syn::Error::new(
+                            path.span(),
+                            format!(
+                                "Invalid bundle attribute. Use `{BUNDLE_ATTRIBUTE_IGNORE_NAME}`"
+                            ),
+                        )
+                        .into_compile_error()
+                        .into();
+                    }
+
+                    return syn::Error::new(attr.span(), format!("Invalid bundle attribute. Use `#[{BUNDLE_ATTRIBUTE_NAME}({BUNDLE_ATTRIBUTE_IGNORE_NAME})]`")).into_compile_error().into();
+                }
+            }
+        }
+
+        field_kind.push(BundleFieldKind::Component);
+    }
+
+    let field = named_fields
+        .iter()
+        .map(|field| field.ident.as_ref().unwrap())
+        .collect::<Vec<_>>();
+    let field_type = named_fields
+        .iter()
+        .map(|field| &field.ty)
+        .collect::<Vec<_>>();
 
     let mut field_component_ids = Vec::new();
     let mut field_get_components = Vec::new();
     let mut field_from_components = Vec::new();
-    for (field_type, field) in field_type.iter().zip(field.iter()) {
-        field_component_ids.push(quote! {
-        <#field_type as #ecs_path::bundle::Bundle>::component_ids(components, storages, &mut *ids);
-        });
-        field_get_components.push(quote! {
-            self.#field.get_components(&mut *func);
-        });
-        field_from_components.push(quote! {
-            #field: <#field_type as #ecs_path::bundle::Bundle>::from_components(ctx, &mut *func),
-        });
+    for ((field_type, field_kind), field) in
+        field_type.iter().zip(field_kind.iter()).zip(field.iter())
+    {
+        match field_kind {
+            BundleFieldKind::Component => {
+                field_component_ids.push(quote! {
+                <#field_type as #ecs_path::bundle::Bundle>::component_ids(components, storages, &mut *ids);
+                });
+                field_get_components.push(quote! {
+                    self.#field.get_components(&mut *func);
+                });
+                field_from_components.push(quote! {
+                    #field: <#field_type as #ecs_path::bundle::Bundle>::from_components(ctx, &mut *func),
+                });
+            }
+
+            BundleFieldKind::Ignore => {
+                field_from_components.push(quote! {
+                    #field: ::std::default::Default::default(),
+                });
+            }
+        }
     }
     let generics = ast.generics;
     let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();

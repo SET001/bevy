@@ -113,7 +113,6 @@ const BUNDLE_ATTRIBUTE_IGNORE_NAME: &str = "ignore";
 #[proc_macro_derive(Bundle, attributes(bundle))]
 pub fn derive_bundle(input: TokenStream) -> TokenStream {
     let ast = parse_macro_input!(input as DeriveInput);
-    let ident = ast.ident;
     let ecs_path = bevy_ecs_path();
     let named_fields = match get_named_struct_fields(&ast.data) {
         Ok(fields) => &fields.named,
@@ -213,8 +212,11 @@ pub fn derive_bundle(input: TokenStream) -> TokenStream {
     let struct_name = &ast.ident;
 
     TokenStream::from(quote! {
-        /// SAFETY: ComponentId is returned in field-definition-order. [from_components] and [get_components] use field-definition-order
-        unsafe impl #impl_generics #ecs_path::bundle::Bundle for #ident #ty_generics #where_clause {
+        // SAFETY:
+        // - ComponentId is returned in field-definition-order. [from_components] and [get_components] use field-definition-order
+        // - `Bundle::get_components` is exactly once for each member. Rely's on the Component -> Bundle implementation to properly pass
+        //   the correct `StorageType` into the callback.
+        unsafe impl #impl_generics #ecs_path::bundle::Bundle for #struct_name #ty_generics #where_clause {
             fn component_ids(
                 components: &mut #ecs_path::component::Components,
                 storages: &mut #ecs_path::storage::Storages,
@@ -234,7 +236,11 @@ pub fn derive_bundle(input: TokenStream) -> TokenStream {
             }
 
             #[allow(unused_variables)]
-            fn get_components(self, func: &mut impl FnMut(#ecs_path::ptr::OwningPtr<'_>)) {
+            #[inline]
+            fn get_components(
+                self,
+                func: &mut impl FnMut(#ecs_path::component::StorageType, #ecs_path::ptr::OwningPtr<'_>)
+            ) {
                 #(#field_get_components)*
             }
         }
